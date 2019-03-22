@@ -16,22 +16,30 @@ import lanedetect
 ROOT = os.path.dirname(__file__)
 pcs = set()
 
+msg = 'pw'
+omsg = 'y'
+set_msg = False
 
 class ImageProcess(VideoStreamTrack):
 	def __init__(self, track):
 		super().__init__()
 		self.track = track
+		self.counter = 0
 
 	async def recv(self):
+		self.counter += 1
+		global msg,set_msg
 		#await screen.orientation.lock("landscape");
 		frame = await self.track.recv()
 		img = frame.to_ndarray(format='bgr24')
 		#function call
 		#img = rotateImage(img, 270)
-		img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE) #rotate image
-		img = lanedetect.detect(img)
-		cv2.imshow('frame',img)
-		cv2.waitKey(2)
+		if self.counter % 5 == 0:
+			img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE) #rotate image
+			img, msg = lanedetect.detect(img)
+			set_msg = True
+			cv2.imshow('frame',img)
+			cv2.waitKey(2)
 
 		new_frame = VideoFrame.from_ndarray(img, format='bgr24')
 		new_frame.pts = frame.pts
@@ -65,8 +73,14 @@ async def offer(request):                                               #receive
 	def on_datachannel(channel):
 		@channel.on('message')
 		def on_message(message):
-			send_msg(channel,lanedetect.msg)#data transfer function
-			# print("msg sent", lanedetect.msg)
+			global set_msg
+			global omsg
+			global msg
+			if set_msg == True and msg != omsg:
+				send_msg(channel, msg)#data transfer function
+				print("msg sent", msg)
+				omsg = msg
+				set_msg = False
 
 	@pc.on('track')
 	def on_track(track):
@@ -74,8 +88,6 @@ async def offer(request):                                               #receive
 		#video function call here
 		video = ImageProcess(track)
 		recorder.addTrack(video)
-
-
 
 		@track.on('ended')
 		async def on_ended():
